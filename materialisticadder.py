@@ -1,6 +1,6 @@
 import json
-from pathlib import Path
 import argparse
+from pathlib import Path
 import time
 import random
 import string
@@ -14,8 +14,6 @@ guid = []
 
 # List of the new children
 newdict = []
-
-
 
 def generateuniques():
     newtime = int(time.time()*10**6)
@@ -54,29 +52,9 @@ def populatedict(uri, title):
    'type': 'text/x-moz-place',
    'uri': uri}
     newdict.append(new)
-
-if __name__ == '__main__':
-    home = str(Path.home())
-    parser = argparse.ArgumentParser()
-    parser.add_argument("pathbm", help = "Full path from $HOME of bookmarks that will updated")
-    parser.add_argument("materialistic", help = "Full path from $HOME of file used for updating")
-    parser.add_argument("destination", help = "Full path from %HOME of new bookmarks")
-    args = parser.parse_args()
-    with open('%(home)s/%(path)s' %{'home':home,'path': args.pathbm}) as fp:
-        bookmarks = json.loads(fp.read())
-    # First level is __root
-    bm = bookmarks['children']
-    tmp = []
-    # Every element of bm is a different position (menu, toolbar, unfiled,mobile)
-    for i in range(0,len(bm)):
-        if 'children' in bm[i]:
-            extracturl(bm[i]['children'])
-    # Create the folder
-    (newtime,newid,newguid) = generateuniques()
-    folder = {'guid':'0','title':'backup','index': 0,'dateAdded': newtime, 'lastModified': newtime, 'id': newid, 'typeCode': 2,
- 'type': 'text/x-moz-place-container'}
-    # Generate the list of new urls
-    with open('%(home)s/%(path)s' %{'home':home,'path': args.materialistic}) as fp:
+def generateurls(home, args):
+    # Generate the list of new urls and titles
+    with open('%(home)s/%(path)s' %{'home':home,'path': args.paths[1]}) as fp:
         newurl = fp.readlines()
     i = 0
     while i < len(newurl):
@@ -90,7 +68,22 @@ if __name__ == '__main__':
     for i in range(len(newurl)):
         newurl[i]=newurl[i][:-1]
         newtitle[i]=newtitle[i][:-1]
-    i = 0
+    return newurl,newtitle
+def jsonupdate(args):
+    home = str(Path.home())
+    with open('%(home)s/%(path)s' %{'home':home,'path': args.paths[0]}) as fp:
+        bookmarks = json.loads(fp.read())
+    # First level is __root
+    bm = bookmarks['children']
+    # Every element of bm is a different position (menu, toolbar, unfiled,mobile)
+    for i in range(0,len(bm)):
+        if 'children' in bm[i]:
+            extracturl(bm[i]['children'])
+    # Create the folder
+    (newtime,newid,newguid) = generateuniques()
+    folder = {'guid':newguid,'title':'backup','index': 0,'dateAdded': newtime, 'lastModified': newtime, 'id': newid, 'typeCode': 2,
+    'type': 'text/x-moz-place-container'}
+    newurl,newtitle = generateurls(home,args)
     while i < len(newurl):
         if newurl[i] in url:
             del newurl[i]
@@ -100,6 +93,20 @@ if __name__ == '__main__':
             i += 1
     folder['children'] = newdict
     bookmarks['children'][1]['children'].append(folder)
-    with open('%(home)s/%(path)s/destination.json' %{'home':home,'path': args.destination}, 'w') as fp:
+    with open('%(home)s/%(path)s/destination.json' %{'home':home,'path': args.paths[2]}, "w+") as fp:
         json.dump(bookmarks,fp)
     
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    subparsers= parser.add_subparsers()
+    parser_sql = subparsers.add_parser('sql', help="update sqlite .places database, using as arguments (in order), path from $HOME: path to DB, full path to Materialistic backup")
+    parser_json = subparsers.add_parser('json', help = "create a new json file with bookmarks to import, using as arguments (in order), path from $HOME: full path to json backup, full path to Materialistic backup, full path to destination")
+    parser_sql.add_argument('paths', nargs=2)
+    parser_json.add_argument('paths', nargs = 3)
+    #parser per sql
+    parser_json.set_defaults(func=jsonupdate)
+    #parser.add_argument("path", help = "Full path from $HOME of bookmarks/sqlite DB that will updated")
+    #parser.add_argument("materialistic", help = "Full path from $HOME of file used for updating")
+    #parser.add_argument("destination", help = "Full path from %HOME of new bookmarks")
+    args = parser.parse_args()
+    args.func(args)
